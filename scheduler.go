@@ -2,12 +2,14 @@ package main
 
 import (
     "bufio"
+    "bytes"
     "fmt"
     "log"
     "net/http"
     "net/url"
     "os"
     "os/exec"
+    "regexp"
     "time"
 )
 
@@ -37,14 +39,16 @@ func sendTelegramMessage(botToken, chatID, message string) error {
     return nil
 }
 
-func runCommand(name string, args ...string) error {
+func runCommand(name string, args ...string) ([]byte, error) {
     cmd := exec.Command(name, args...)
-    cmd.Stdout = os.Stdout
-    cmd.Stderr = os.Stderr
-    return cmd.Run()
+    var out bytes.Buffer
+    cmd.Stdout = &out
+    cmd.Stderr = &out
+    err := cmd.Run()
+    return out.Bytes(), err
 }
 
-func executeCommands() error {
+func executeCommands() ([]byte, error) {
     commands := [][]string{
         {"sudo", "systemctl", "stop", "stationd"},
         {"cd", "tracks"},
@@ -55,18 +59,31 @@ func executeCommands() error {
         {"sudo", "journalctl", "-u", "stationd", "-f", "--no-hostname", "-o", "cat"},
     }
 
+    var finalOutput bytes.Buffer
+
     for _, cmd := range commands {
         if len(cmd) > 1 && cmd[0] == "cd" {
             if err := os.Chdir(cmd[1]); err != nil {
-                return fmt.Errorf("failed to change directory: %v", err)
+                return nil, fmt.Errorf("failed to change directory: %v", err)
             }
         } else {
-            if err := runCommand(cmd[0], cmd[1:]...); err != nil {
-                return fmt.Errorf("failed to execute command %s: %v", cmd[0], err)
+            output, err := runCommand(cmd[0], cmd[1:]...)
+            finalOutput.Write(output)
+            if err != nil {
+                return finalOutput.Bytes(), fmt.Errorf("failed to execute command %s: %v", cmd[0], err)
             }
         }
     }
-    return nil
+    return finalOutput.Bytes(), nil
+}
+
+func parsePodNumber(logData []byte) string {
+    re := regexp.MustCompile(`Pod Number= (\d+)`)
+    match := re.FindSubmatch(logData)
+    if match != nil {
+        return string(match[1])
+    }
+    return "N/A"
 }
 
 func main() {
@@ -78,13 +95,14 @@ func main() {
     defer commandTicker.Stop()
     defer logTicker.Stop()
 
+    var lastCommandOutput []byte
     var lastCommandError error
     startTime := time.Now().Format(time.RFC1123)
 
     for {
         select {
         case <-commandTicker.C:
-            lastCommandError = executeCommands()
+            lastCommandOutput, lastCommandError = executeCommands()
         case <-logTicker.C:
             currentTime := time.Now().Format(time.RFC1123)
             if lastCommandError != nil {
@@ -92,7 +110,8 @@ func main() {
                 log.Println(errMsg)
                 sendTelegramMessage(botToken, chatID, errMsg)
             } else {
-                successMsg := fmt.Sprintf("Time: %s\nStatus: Success\nDetails: All commands executed successfully since %s.", currentTime, startTime)
+                podNumber := parsePodNumber(lastCommandOutput)
+                successMsg := fmt.Sprintf("Time: %s\nStatus: Success\nDetails: All commands executed successfully since %s.\nPod Number: %s", currentTime, startTime, podNumber)
                 log.Println(successMsg)
                 sendTelegramMessage(botToken, chatID, successMsg)
             }
