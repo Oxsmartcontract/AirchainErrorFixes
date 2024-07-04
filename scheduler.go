@@ -90,21 +90,26 @@ func main() {
     botToken := getInput("Enter your Telegram bot token: ")
     chatID := getInput("Enter your Telegram chat ID: ")
 
-    commandTicker := time.NewTicker(40 * time.Minute)
+    loc, err := time.LoadLocation("Asia/Tehran")
+    if err != nil {
+        log.Fatalf("Failed to load location: %v", err)
+    }
+
+    commandTicker := time.NewTicker(20 * time.Minute)
     logTicker := time.NewTicker(10 * time.Minute)
     defer commandTicker.Stop()
     defer logTicker.Stop()
 
     var lastCommandOutput []byte
     var lastCommandError error
-    startTime := time.Now().Format(time.RFC1123)
+    startTime := time.Now().In(loc).Format(time.RFC1123)
 
     for {
         select {
         case <-commandTicker.C:
             lastCommandOutput, lastCommandError = executeCommands()
         case <-logTicker.C:
-            currentTime := time.Now().Format(time.RFC1123)
+            currentTime := time.Now().In(loc).Format(time.RFC1123)
             if lastCommandError != nil {
                 errMsg := fmt.Sprintf("Time: %s\nStatus: Error\nDetails: %v", currentTime, lastCommandError)
                 log.Println(errMsg)
