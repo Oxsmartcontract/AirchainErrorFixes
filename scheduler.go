@@ -73,20 +73,29 @@ func main() {
     botToken := getInput("Enter your Telegram bot token: ")
     chatID := getInput("Enter your Telegram chat ID: ")
 
-    ticker := time.NewTicker(40 * time.Minute)
-    defer ticker.Stop()
+    commandTicker := time.NewTicker(40 * time.Minute)
+    logTicker := time.NewTicker(10 * time.Minute)
+    defer commandTicker.Stop()
+    defer logTicker.Stop()
+
+    var lastCommandError error
+    startTime := time.Now().Format(time.RFC1123)
 
     for {
-        err := executeCommands()
-        if err != nil {
-            errMsg := fmt.Sprintf("Error running commands: %v", err)
-            log.Println(errMsg)
-            sendTelegramMessage(botToken, chatID, errMsg)
-        } else {
-            successMsg := "All commands executed successfully!"
-            log.Println(successMsg)
-            sendTelegramMessage(botToken, chatID, successMsg)
+        select {
+        case <-commandTicker.C:
+            lastCommandError = executeCommands()
+        case <-logTicker.C:
+            currentTime := time.Now().Format(time.RFC1123)
+            if lastCommandError != nil {
+                errMsg := fmt.Sprintf("Time: %s\nStatus: Error\nDetails: %v", currentTime, lastCommandError)
+                log.Println(errMsg)
+                sendTelegramMessage(botToken, chatID, errMsg)
+            } else {
+                successMsg := fmt.Sprintf("Time: %s\nStatus: Success\nDetails: All commands executed successfully since %s.", currentTime, startTime)
+                log.Println(successMsg)
+                sendTelegramMessage(botToken, chatID, successMsg)
+            }
         }
-        <-ticker.C
     }
 }
