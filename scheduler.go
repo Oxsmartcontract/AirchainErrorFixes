@@ -14,55 +14,6 @@ func runCommand(name string, args ...string) error {
     return cmd.Run()
 }
 
-func checkAndInstallGo() {
-    _, err := exec.LookPath("go")
-    if err != nil {
-        log.Println("Go not found, installing Go 1.21.6...")
-
-        version := "1.21.6"
-        arch := "amd64"
-        goURL := "https://golang.org/dl/go" + version + ".linux-" + arch + ".tar.gz"
-        goTar := "go" + version + ".linux-" + arch + ".tar.gz"
-
-        err = runCommand("curl", "-O", "-L", goURL)
-        if err != nil {
-            log.Fatalf("failed to download Go: %v", err)
-        }
-
-        err = runCommand("tar", "-xf", goTar)
-        if err != nil {
-            log.Fatalf("failed to extract Go tarball: %v", err)
-        }
-
-        err = runCommand("sudo", "rm", "-rf", "/usr/local/go")
-        if err != nil {
-            log.Fatalf("failed to remove existing Go installation: %v", err)
-        }
-
-        err = runCommand("sudo", "mv", "-v", "go", "/usr/local")
-        if err != nil {
-            log.Fatalf("failed to move Go to /usr/local: %v", err)
-        }
-
-        os.Setenv("GOPATH", os.Getenv("HOME")+"/go")
-        os.Setenv("PATH", os.Getenv("PATH")+":/usr/local/go/bin:"+os.Getenv("GOPATH")+"/bin")
-
-        err = runCommand("source", "~/.bash_profile")
-        if err != nil {
-            log.Printf("failed to source ~/.bash_profile: %v", err)
-        }
-
-        err = runCommand("go", "version")
-        if err != nil {
-            log.Fatalf("failed to verify Go installation: %v", err)
-        }
-
-        log.Println("Go 1.21.6 installed successfully.")
-    } else {
-        log.Println("Go is already installed.")
-    }
-}
-
 func executeCommands() {
     commands := [][]string{
         {"sudo", "systemctl", "stop", "stationd"},
@@ -88,9 +39,7 @@ func executeCommands() {
 }
 
 func main() {
-    checkAndInstallGo()
-
-    ticker := time.NewTicker(40 * time.Minute)
+    ticker := time.NewTicker(20 * time.Minute)
     defer ticker.Stop()
 
     for {
